@@ -62,3 +62,17 @@ A queued response does not mean a provider accepted the message or that it reach
 ```
 
 Never return provider credentials, stack traces, internal SQL errors, or private message content in an error response.
+
+## Additional implemented endpoints
+
+- `GET/POST /api/v1/projects` — list accessible projects or create one in an owned/administered organization.
+- `GET/POST /api/v1/projects/{projectId}/credentials` — list key metadata or create a public/private credential; the full key is returned once.
+- `GET/POST /api/v1/projects/{projectId}/origins` — manage exact browser origins.
+- `GET/POST /api/v1/projects/{projectId}/recipients` — manage explicit recipient allowlists for browser sends.
+- `GET/POST /api/v1/projects/{projectId}/providers` — connect Resend with encrypted credentials after checking the provider key and verified sender domain.
+- `GET/POST /api/v1/projects/{projectId}/templates` — list or create draft templates.
+- `POST /api/v1/templates/{templateId}/publish` — create a version snapshot and publish the template.
+- `GET /api/v1/projects/{projectId}/messages` — list delivery metadata and attempts.
+- `GET /api/v1/projects/{projectId}/usage` — read actual monthly quota usage.
+
+The browser SDK only accepts `mb_pub_` keys and supports one explicitly allowlisted recipient per request. Public credentials require an exact `Origin` allowlist; origin checks are not authentication. The send API returns HTTP 202 with `status: queued` only after durable job insertion. The worker's `accepted` state is not a delivery confirmation. Provider webhooks and verified delivery-event handling are not implemented yet.
