@@ -1,0 +1,45 @@
+{
+  "name": "mailbridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Self-hostable developer email delivery platform",
+  "engines": { "node": ">=20.11" },
+  "scripts": {
+    "dev": "next dev",
+    "build": "prisma generate && next build",
+    "start": "next start",
+    "worker": "tsx apps/worker/src/index.ts",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:studio": "prisma studio",
+    "format": "prettier --write ."
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.0",
+    "argon2": "^0.44.0",
+    "handlebars": "^4.7.8",
+    "next": "^15.5.6",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "resend": "^6.1.2",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.3.1",
+    "@types/node": "^22.18.6",
+    "@types/react": "^19.1.16",
+    "@types/react-dom": "^19.1.9",
+    "eslint": "^9.37.0",
+    "eslint-config-next": "^15.5.6",
+    "prettier": "^3.6.2",
+    "prisma": "^6.19.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}
