@@ -9,6 +9,7 @@ const maxAttempts = Math.min(10, Math.max(1, Number(process.env.WORKER_MAX_ATTEM
 let stopping = false;
 
 type Payload = { to: string[]; subject: string; html: string; text?: string; from: string };
+function monthStart(date: Date) { return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1)); }
 function retryDelay(attempt: number) { const base = Math.min(60 * 60_000, 1000 * 2 ** Math.min(attempt, 10)); return Math.floor(base * (0.75 + Math.random() * 0.5)); }
 function providerErrorCode(error: unknown) { return error && typeof error === "object" && "statusCode" in error ? Number(error.statusCode) : 0; }
 
@@ -38,6 +39,7 @@ async function processOne() {
       db.emailMessage.update({ where: { id: job.messageId }, data: { status: "ACCEPTED", providerMessageId: result.data.id, errorCode: null } }),
       db.deliveryAttempt.update({ where: { id: attempt.id }, data: { providerStatus: "accepted", finishedAt: new Date() } }),
       db.deliveryJob.update({ where: { id: job.id, lockToken }, data: { status: "COMPLETED", lockedAt: null, lockToken: null, lastError: null } }),
+      db.usageRecord.updateMany({ where: { projectId: job.message.projectId, periodStart: monthStart(job.message.createdAt) }, data: { accepted: { increment: job.message.recipientCount } } }),
       db.auditEvent.create({ data: { organizationId: undefined, action: "delivery.provider_accepted", resourceType: "EmailMessage", resourceId: job.messageId, requestId: job.message.requestId, metadata: { provider: provider.provider } } })
     ]);
   } catch (error) {
@@ -50,7 +52,8 @@ async function processOne() {
     await db.$transaction([
       db.emailMessage.update({ where: { id: job.messageId }, data: { status: terminal ? (permanent ? "REJECTED" : "FAILED") : "QUEUED", errorCode: safeCode } }),
       db.deliveryAttempt.update({ where: { id: attempt.id }, data: { errorCode: safeCode, errorMessage: safeMessage, finishedAt: new Date() } }),
-      db.deliveryJob.update({ where: { id: job.id, lockToken }, data: { status: terminal ? "DEAD" : "PENDING", runAt: terminal ? now : retryAt, lockedAt: null, lockToken: null, lastError: safeCode } })
+      db.deliveryJob.update({ where: { id: job.id, lockToken }, data: { status: terminal ? "DEAD" : "PENDING", runAt: terminal ? now : retryAt, lockedAt: null, lockToken: null, lastError: safeCode } }),
+      ...(terminal ? [db.usageRecord.updateMany({ where: { projectId: job.message.projectId, periodStart: monthStart(job.message.createdAt) }, data: { failed: { increment: job.message.recipientCount } } })] : [])
     ]);
   }
   return true;
