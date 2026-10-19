@@ -11,14 +11,14 @@ export class MailBridge {
   private readonly baseUrl: string;
   private readonly fetcher: typeof fetch;
   constructor(options: MailBridgeOptions) {
-    if (!options.publicKey || options.publicKey.length < 8) throw new Error("A MailBridge public key is required");
+    if (!options.publicKey || !options.publicKey.startsWith("mb_pub_")) throw new Error("A MailBridge public key (mb_pub_...) is required. Private credentials must never be used in browser code.");
     this.publicKey = options.publicKey;
     this.baseUrl = (options.baseUrl ?? "https://mailbridge.example").replace(/\/$/, "");
     this.fetcher = options.fetcher ?? fetch;
   }
   async send(options: SendEmailOptions): Promise<SendEmailResult> {
     if (!options.projectId || !options.templateId) throw new Error("projectId and templateId are required");
-    if (!Array.isArray(options.to) || options.to.length < 1 || options.to.length > 5) throw new Error("to must contain between 1 and 5 recipients");
+    if (!Array.isArray(options.to) || options.to.length !== 1) throw new Error("Browser credentials support exactly one explicitly allowlisted recipient per request");
     const response = await this.fetcher(this.baseUrl + "/api/v1/email/send", {
       method: "POST",
       headers: {
