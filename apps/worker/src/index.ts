@@ -13,7 +13,22 @@ function monthStart(date: Date) { return new Date(Date.UTC(date.getUTCFullYear()
 function retryDelay(attempt: number) { const base = Math.min(60 * 60_000, 1000 * 2 ** Math.min(attempt, 10)); return Math.floor(base * (0.75 + Math.random() * 0.5)); }
 function providerErrorCode(error: unknown) { return error && typeof error === "object" && "statusCode" in error ? Number(error.statusCode) : 0; }
 
+
+async function recoverStaleJobs() {
+  const cutoff = new Date(Date.now() - 5 * 60_000);
+  const stale = await db.deliveryJob.findMany({ where: { status: "PROCESSING", lockedAt: { lt: cutoff } }, select: { id: true, messageId: true } });
+  for (const item of stale) {
+    await db.$transaction(async tx => {
+      const changed = await tx.deliveryJob.updateMany({ where: { id: item.id, status: "PROCESSING", lockedAt: { lt: cutoff } }, data: { status: "DEAD", lockedAt: null, lockToken: null, lastError: "DELIVERY_OUTCOME_UNKNOWN" } });
+      if (changed.count !== 1) return;
+      await tx.emailMessage.updateMany({ where: { id: item.messageId, status: { in: ["QUEUED", "ACCEPTED"] } }, data: { status: "UNKNOWN", errorCode: "DELIVERY_OUTCOME_UNKNOWN" } });
+      await tx.auditEvent.create({ data: { action: "delivery.stale_job_quarantined", resourceType: "EmailMessage", resourceId: item.messageId, metadata: { reason: "worker_lease_expired" } } });
+    });
+  }
+}
+
 async function processOne() {
+  await recoverStaleJobs();
   const now = new Date();
   const candidate = await db.deliveryJob.findFirst({ where: { status: "PENDING", runAt: { lte: now } }, orderBy: { runAt: "asc" }, select: { id: true } });
   if (!candidate) return false;
