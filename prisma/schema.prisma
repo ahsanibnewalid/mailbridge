@@ -1,0 +1,256 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum MembershipRole { OWNER ADMINISTRATOR DEVELOPER READ_ONLY }
+enum CredentialType { PUBLIC PRIVATE }
+enum TemplateStatus { DRAFT PUBLISHED ARCHIVED }
+enum MessageStatus { QUEUED ACCEPTED DELIVERED BOUNCED REJECTED FAILED UNKNOWN }
+enum JobStatus { PENDING PROCESSING COMPLETED DEAD }
+
+model User {
+  id String @id @default(cuid())
+  email String @unique
+  passwordHash String
+  name String?
+  emailVerifiedAt DateTime?
+  disabledAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  sessions Session[]
+  memberships OrganizationMembership[]
+  auditEvents AuditEvent[] @relation("AuditActor")
+}
+model Session {
+  id String @id @default(cuid())
+  tokenHash String @unique
+  userId String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, expiresAt])
+}
+model Organization {
+  id String @id @default(cuid())
+  name String
+  slug String @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  memberships OrganizationMembership[]
+  projects Project[]
+}
+model OrganizationMembership {
+  id String @id @default(cuid())
+  userId String
+  organizationId String
+  role MembershipRole @default(DEVELOPER)
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  @@unique([userId, organizationId])
+  @@index([organizationId, role])
+}
+model Project {
+  id String @id @default(cuid())
+  name String
+  organizationId String
+  monthlyQuota Int @default(100)
+  enabled Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  credentials ProjectCredential[]
+  origins AllowedOrigin[]
+  providers EmailProviderConnection[]
+  senders SenderIdentity[]
+  templates EmailTemplate[]
+  messages EmailMessage[]
+  usageRecords UsageRecord[]
+  @@index([organizationId])
+}
+model ProjectCredential {
+  id String @id @default(cuid())
+  projectId String
+  type CredentialType
+  prefix String
+  secretHash String
+  label String
+  permissions String[]
+  lastUsedAt DateTime?
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  @@index([projectId, type, revokedAt])
+  @@index([prefix])
+}
+model AllowedOrigin {
+  id String @id @default(cuid())
+  projectId String
+  origin String
+  createdAt DateTime @default(now())
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  @@unique([projectId, origin])
+}
+model EmailProviderConnection {
+  id String @id @default(cuid())
+  projectId String
+  provider String
+  displayName String
+  encryptedCredentials String
+  encryptionKeyVersion Int @default(1)
+  defaultFromEmail String
+  defaultFromName String?
+  enabled Boolean @default(true)
+  lastTestedAt DateTime?
+  lastErrorCode String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  messages EmailMessage[]
+  @@index([projectId, enabled])
+}
+model SenderIdentity {
+  id String @id @default(cuid())
+  projectId String
+  email String
+  name String?
+  verifiedAt DateTime?
+  isDefault Boolean @default(false)
+  createdAt DateTime @default(now())
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  @@unique([projectId, email])
+}
+model EmailTemplate {
+  id String @id @default(cuid())
+  projectId String
+  identifier String
+  name String
+  subject String
+  htmlBody String
+  textBody String?
+  status TemplateStatus @default(DRAFT)
+  publishedVersion Int?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  versions TemplateVersion[]
+  messages EmailMessage[]
+  @@unique([projectId, identifier])
+  @@index([projectId, status])
+}
+model TemplateVersion {
+  id String @id @default(cuid())
+  templateId String
+  version Int
+  subject String
+  htmlBody String
+  textBody String?
+  createdAt DateTime @default(now())
+  template EmailTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  @@unique([templateId, version])
+}
+model EmailMessage {
+  id String @id @default(cuid())
+  projectId String
+  templateId String?
+  providerId String?
+  requestId String @unique
+  idempotencyKey String?
+  recipientHash String?
+  recipientCount Int @default(1)
+  subjectSnapshot String?
+  status MessageStatus @default(QUEUED)
+  providerMessageId String?
+  errorCode String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  template EmailTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  provider EmailProviderConnection? @relation(fields: [providerId], references: [id], onDelete: SetNull)
+  attempts DeliveryAttempt[]
+  job DeliveryJob?
+  @@unique([projectId, idempotencyKey])
+  @@index([projectId, createdAt])
+  @@index([projectId, status, createdAt])
+}
+model DeliveryAttempt {
+  id String @id @default(cuid())
+  messageId String
+  attemptNumber Int
+  providerStatus String?
+  errorCode String?
+  errorMessage String?
+  startedAt DateTime @default(now())
+  finishedAt DateTime?
+  message EmailMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  @@unique([messageId, attemptNumber])
+}
+model DeliveryJob {
+  id String @id @default(cuid())
+  messageId String @unique
+  status JobStatus @default(PENDING)
+  attempts Int @default(0)
+  runAt DateTime @default(now())
+  lockedAt DateTime?
+  lockToken String?
+  lastError String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  message EmailMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  @@index([status, runAt])
+}
+model ProviderWebhookEvent {
+  id String @id @default(cuid())
+  provider String
+  eventId String
+  eventType String
+  receivedAt DateTime @default(now())
+  processedAt DateTime?
+  payloadHash String
+  @@unique([provider, eventId])
+  @@index([processedAt, receivedAt])
+}
+model UsageRecord {
+  id String @id @default(cuid())
+  projectId String
+  periodStart DateTime
+  periodEnd DateTime
+  attempted Int @default(0)
+  accepted Int @default(0)
+  delivered Int @default(0)
+  failed Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  @@unique([projectId, periodStart])
+  @@index([projectId, periodStart])
+}
+model Plan {
+  id String @id @default(cuid())
+  code String @unique
+  name String
+  monthlyQuota Int
+  enabled Boolean @default(true)
+  createdAt DateTime @default(now())
+}
+model AuditEvent {
+  id String @id @default(cuid())
+  actorUserId String?
+  organizationId String?
+  action String
+  resourceType String
+  resourceId String?
+  requestId String?
+  metadata Json?
+  createdAt DateTime @default(now())
+  actor User? @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  @@index([organizationId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([action, createdAt])
+}
