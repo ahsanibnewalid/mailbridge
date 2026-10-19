@@ -18,7 +18,9 @@ export async function POST(request: Request) {
       const token = await tx.authToken.findUnique({ where: { tokenHash } });
       const now = new Date();
       if (!token || token.purpose !== "PASSWORD_RESET" || token.usedAt || token.expiresAt <= now) return false;
-      await tx.authToken.update({ where: { id: token.id }, data: { usedAt: now } });
+      const claimed = await tx.authToken.updateMany({ where: { id: token.id, purpose: "PASSWORD_RESET", usedAt: null, expiresAt: { gt: now } }, data: { usedAt: now } });
+      if (claimed.count !== 1) return false;
+      await tx.authToken.updateMany({ where: { userId: token.userId, purpose: "PASSWORD_RESET", usedAt: null }, data: { usedAt: now } });
       await tx.user.update({ where: { id: token.userId }, data: { passwordHash } });
       await tx.session.updateMany({ where: { userId: token.userId, revokedAt: null }, data: { revokedAt: now } });
       await tx.auditEvent.create({ data: { actorUserId: token.userId, action: "auth.password_reset", resourceType: "User", resourceId: token.userId, requestId: id } });
