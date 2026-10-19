@@ -6,18 +6,22 @@ import { db } from "@/lib/db";
 import { encryptSecret } from "@/lib/crypto";
 import { validateTemplateVariables } from "@/lib/template";
 import { authenticateProjectCredential } from "@/lib/project-auth";
+import { checkFixedRateLimit } from "@/lib/rate-limit";
 
 const schema = z.object({ project_id: z.string().min(1).max(100), template_id: z.string().min(1).max(100), to: z.array(z.string().email().max(254)).min(1).max(5), variables: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).default({}) }).strict();
 function monthStart(date: Date) { return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1)); }
 function err(status: number, code: string, message: string, id: string) { return apiError(status, code, message, id); }
 async function handleSend(request: Request) {
   const id = requestId(request);
-  if (Number(request.headers.get("content-length") || 0) > 32_000) return err(413, "REQUEST_TOO_LARGE", "Request body exceeds 32 KB.", id);
+  let rawBody: string;
+  try { rawBody = await request.text(); } catch { return err(400, "INVALID_REQUEST", "Request body could not be read.", id); }
+  if (Buffer.byteLength(rawBody, "utf8") > 32_000) return err(413, "REQUEST_TOO_LARGE", "Request body exceeds 32 KB.", id);
   let body;
-  try { body = schema.safeParse(await request.json()); } catch { body = null; }
+  try { body = schema.safeParse(JSON.parse(rawBody)); } catch { body = null; }
   if (!body || !body.success) return err(400, "INVALID_REQUEST", "Provide a valid project_id, template_id, recipients, and primitive template variables.", id);
   const auth = await authenticateProjectCredential(request).catch(() => null);
   if (!auth || auth.project.id !== body.data.project_id || !auth.credential.permissions.includes("email:send")) return err(401, "INVALID_CREDENTIAL", "The credential is invalid or is not authorized for this project.", id);
+  if (!(await checkFixedRateLimit(auth.credential.id, "email-send", 60, 60_000))) return err(429, "RATE_LIMITED", "This credential has reached the sending rate limit. Try again shortly.", id);
   const isPublic = auth.credential.type === "PUBLIC";
   if (isPublic) {
     const origin = request.headers.get("origin");
