@@ -3,11 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "description": "Self-hostable developer email delivery platform",
-  "engines": { "node": ">=20.11" },
+  "engines": {
+    "node": ">=20.11"
+  },
   "scripts": {
-    "dev": "next dev",
-    "build": "prisma generate && next build",
-    "start": "next start",
+    "dev": "next dev apps/web",
+    "build": "prisma generate && next build apps/web",
+    "start": "next start apps/web",
     "worker": "tsx apps/worker/src/index.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
@@ -21,6 +23,7 @@
   },
   "dependencies": {
     "@prisma/client": "^6.19.0",
+    "@tailwindcss/postcss": "^4.1.14",
     "argon2": "^0.44.0",
     "handlebars": "^4.7.8",
     "next": "^15.5.6",
@@ -38,6 +41,7 @@
     "eslint-config-next": "^15.5.6",
     "prettier": "^3.6.2",
     "prisma": "^6.19.0",
+    "tailwindcss": "^4.1.14",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
