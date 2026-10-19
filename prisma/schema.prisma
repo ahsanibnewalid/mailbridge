@@ -165,6 +165,7 @@ model EmailMessage {
   providerId String?
   requestId String @unique
   idempotencyKey String?
+  requestHash String?
   recipientHash String?
   recipientCount Int @default(1)
   subjectSnapshot String?
