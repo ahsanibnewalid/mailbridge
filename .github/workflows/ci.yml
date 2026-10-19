@@ -12,6 +12,23 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: mailbridge
+          POSTGRES_USER: mailbridge
+          POSTGRES_PASSWORD: dev
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U mailbridge -d mailbridge"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://mailbridge:dev@localhost:5432/mailbridge?schema=public
+      PROVIDER_ENCRYPTION_KEY_BASE64: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -19,14 +36,8 @@ jobs:
           node-version: 20
       - run: npm install --no-audit --no-fund
       - run: npm run db:generate
-        env:
-          DATABASE_URL: postgresql://mailbridge:dev@localhost:5432/mailbridge
-      - name: Generate initial migration SQL for review
-        run: npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script > /tmp/mailbridge-migration.sql && echo MIGRATION_SQL_START && cat /tmp/mailbridge-migration.sql && echo MIGRATION_SQL_END
+      - run: npm run db:deploy
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
-        env:
-          DATABASE_URL: postgresql://mailbridge:dev@localhost:5432/mailbridge
-          PROVIDER_ENCRYPTION_KEY_BASE64: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
