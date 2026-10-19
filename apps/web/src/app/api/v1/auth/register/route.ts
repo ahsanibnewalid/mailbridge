@@ -4,7 +4,7 @@ import { z } from "zod";
 import argon2 from "argon2";
 import { db } from "@/lib/db";
 import { createOpaqueToken } from "@/lib/crypto";
-import { checkAuthRateLimit } from "@/lib/rate-limit";
+import { checkAuthRateLimit, checkFixedRateLimit } from "@/lib/rate-limit";
 import { sendPlatformEmail } from "@/lib/mail";
 import { requestId } from "@/lib/http";
 
@@ -16,6 +16,7 @@ export async function POST(request: Request) {
   try { parsed = schema.safeParse(await request.json()); } catch { parsed = null; }
   if (!parsed || !parsed.success) return NextResponse.json({ success: false, error: { code: "INVALID_REQUEST", message: "Provide a valid email, a password of at least 12 characters, and an optional name." }, request_id: id }, { status: 400, headers: { "x-request-id": id, "cache-control": "no-store" } });
   const email = parsed.data.email.toLowerCase();
+  if (!(await checkFixedRateLimit(email, "register-email", 5, 60 * 60_000))) return NextResponse.json({ success: true, message: "If this address can be registered, verification instructions will be sent.", request_id: id }, { status: 202, headers: { "cache-control": "no-store" } });
   const passwordHash = await argon2.hash(parsed.data.password, { type: argon2.argon2id, memoryCost: 19456, timeCost: 2, parallelism: 1 });
   const token = createOpaqueToken(32);
   const tokenHash = createHash("sha256").update(token).digest("hex");
