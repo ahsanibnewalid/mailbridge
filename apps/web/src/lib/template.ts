@@ -20,5 +20,5 @@ export function renderTemplate(source: string, variables: unknown): string {
   if (source.length > 200_000) throw new Error("template exceeds maximum size");
   const safeVariables = validateTemplateVariables(variables);
   // Handlebars escapes interpolated values by default. Do not register unsafe helpers or enable prototype access.
-  return Handlebars.compile(source, { strict: true, noEscape: false, allowProtoPropertiesByDefault: false, allowProtoMethodsByDefault: false })(safeVariables);
+  return Handlebars.compile(source, { strict: true, noEscape: false, allowProtoMethodsByDefault: false })(safeVariables);
 }
