@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { createOpaqueToken } from "@/lib/crypto";
-import { checkAuthRateLimit } from "@/lib/rate-limit";
+import { checkAuthRateLimit, checkFixedRateLimit } from "@/lib/rate-limit";
 import { sendPlatformEmail } from "@/lib/mail";
 import { requestId } from "@/lib/http";
 const schema = z.object({ email: z.string().trim().email().max(254) }).strict();
@@ -12,6 +12,7 @@ export async function POST(request: Request) {
   if (!(await checkAuthRateLimit(request, "password-reset", 5))) return NextResponse.json({ success: true, message: "If the account is eligible, reset instructions will be sent.", request_id: id }, { status: 202, headers: { "cache-control": "no-store" } });
   let parsed; try { parsed = schema.safeParse(await request.json()); } catch { parsed = null; }
   if (parsed?.success) {
+    if (!(await checkFixedRateLimit(parsed.data.email.toLowerCase(), "password-reset-email", 5, 60 * 60_000))) return NextResponse.json({ success: true, message: "If the account is eligible, reset instructions will be sent.", request_id: id }, { status: 202, headers: { "cache-control": "no-store" } });
     const user = await db.user.findUnique({ where: { email: parsed.data.email.toLowerCase() } });
     if (user && user.emailVerifiedAt && !user.disabledAt) {
       const token = createOpaqueToken(32); const tokenHash = createHash("sha256").update(token).digest("hex");
