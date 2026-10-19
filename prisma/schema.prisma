@@ -12,6 +12,7 @@ enum CredentialType { PUBLIC PRIVATE }
 enum TemplateStatus { DRAFT PUBLISHED ARCHIVED }
 enum MessageStatus { QUEUED ACCEPTED DELIVERED BOUNCED REJECTED FAILED UNKNOWN }
 enum JobStatus { PENDING PROCESSING COMPLETED DEAD }
+enum AuthTokenPurpose { EMAIL_VERIFICATION PASSWORD_RESET }
 
 model User {
   id String @id @default(cuid())
@@ -23,6 +24,7 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   sessions Session[]
+  authTokens AuthToken[]
   memberships OrganizationMembership[]
   auditEvents AuditEvent[] @relation("AuditActor")
 }
@@ -165,6 +167,7 @@ model EmailMessage {
   recipientHash String?
   recipientCount Int @default(1)
   subjectSnapshot String?
+  payloadEncrypted String?
   status MessageStatus @default(QUEUED)
   providerMessageId String?
   errorCode String?
@@ -253,4 +256,23 @@ model AuditEvent {
   @@index([organizationId, createdAt])
   @@index([actorUserId, createdAt])
   @@index([action, createdAt])
+}
+
+model AuthToken {
+  id String @id @default(cuid())
+  userId String
+  tokenHash String @unique
+  purpose AuthTokenPurpose
+  expiresAt DateTime
+  usedAt DateTime?
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, purpose, expiresAt])
+}
+model AuthRateLimit {
+  keyHash String @id
+  count Int @default(0)
+  windowStartedAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([windowStartedAt])
 }
