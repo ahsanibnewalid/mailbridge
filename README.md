@@ -31,7 +31,7 @@ flowchart TD
   Web --> Logs[Delivery history and audit events]
 ```
 
-The initial deployment target is a container-capable Node.js host plus managed PostgreSQL. The delivery worker must run as a persistent process; static hosting (including GitHub Pages) cannot run the API or worker. Redis is deliberately not mandatory for the first stage: PostgreSQL is the source of truth for durable jobs. A later queue backend can be added behind an interface if throughput requires it.
+The initial deployment target is a container-capable Node.js host plus PostgreSQL. Docker Compose runs the web app and persistent delivery worker as separate services; static hosting (including GitHub Pages) cannot run the API or worker. Redis is deliberately not mandatory for the first stage: PostgreSQL is the source of truth for durable jobs. A later queue backend can be added behind an interface if throughput requires it.
 
 ## Repository structure
 
@@ -83,12 +83,11 @@ See [Architecture](docs/ARCHITECTURE.md), [Threat model](docs/THREAT_MODEL.md), 
 
 Requirements: Node.js 20+, npm, Docker with Compose, and a transactional provider account for real sends.
 
-1. Copy `.env.example` to `.env` and fill in local-only values.
-2. Start PostgreSQL: `docker compose up -d db`.
-3. Install dependencies: `npm install`.
-4. Generate Prisma client and apply migrations: `npm run db:generate && npm run db:migrate`.
-5. Start the web application: `npm run dev`.
-6. Run checks: `npm run lint && npm run typecheck && npm test && npm run build`.
+1. Copy `.env.example` to `.env`, replace `POSTGRES_PASSWORD` with a strong random password, and set `PROVIDER_ENCRYPTION_KEY_BASE64` to a generated 32-byte key (`openssl rand -base64 32`). Configure `APP_URL`, `RESEND_API_KEY`, `DEFAULT_FROM_EMAIL`, and `RESEND_WEBHOOK_SECRET` as needed.
+2. Start the full stack: `docker compose up --build -d`. Compose starts PostgreSQL, applies migrations before starting the web service, and starts the persistent delivery worker.
+3. Open `http://localhost:3000` and register. Registration requires working platform email settings so the verification link can be delivered.
+4. For local development outside containers, use a local PostgreSQL URL in `DATABASE_URL`, then run `npm install`, `npm run db:generate`, `npm run db:migrate`, and `npm run dev`. Run the worker separately with `npm run worker`.
+5. Run checks: `npm run lint && npm run typecheck && npm test && npm run build`.
 
 Real email delivery requires a configured provider and a verified sender identity. Automated tests must use mocks and must not send real email.
 
