@@ -12,7 +12,8 @@ export async function GET(request: Request) {
     const result = await db.$transaction(async (tx) => {
       const row = await tx.authToken.findUnique({ where: { tokenHash }, include: { user: true } });
       if (!row || row.purpose !== "EMAIL_VERIFICATION" || row.usedAt || row.expiresAt <= now) return false;
-      await tx.authToken.update({ where: { id: row.id }, data: { usedAt: now } });
+      const claimed = await tx.authToken.updateMany({ where: { id: row.id, purpose: "EMAIL_VERIFICATION", usedAt: null, expiresAt: { gt: now } }, data: { usedAt: now } });
+      if (claimed.count !== 1) return false;
       await tx.user.update({ where: { id: row.userId }, data: { emailVerifiedAt: now } });
       await tx.auditEvent.create({ data: { actorUserId: row.userId, action: "auth.email_verified", resourceType: "User", resourceId: row.userId, requestId: id } });
       return true;
