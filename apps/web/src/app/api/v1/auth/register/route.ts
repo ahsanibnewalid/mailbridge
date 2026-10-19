@@ -20,6 +20,7 @@ export async function POST(request: Request) {
   const token = createOpaqueToken(32);
   const tokenHash = createHash("sha256").update(token).digest("hex");
   const local = email.split("@")[0].replace(/[^a-z0-9-]/g, "-").slice(0, 24) || "workspace";
+  let createdUserId: string | undefined;
   try {
     const user = await db.$transaction(async (tx) => {
       const created = await tx.user.create({ data: { email, passwordHash, name: parsed.data.name } });
@@ -30,11 +31,13 @@ export async function POST(request: Request) {
       await tx.auditEvent.create({ data: { actorUserId: created.id, organizationId: organization.id, action: "auth.registered", resourceType: "User", resourceId: created.id, requestId: id } });
       return created;
     });
+    createdUserId = user.id;
     const verifyUrl = new URL("/api/v1/auth/verify", process.env.APP_URL || "http://localhost:3000");
     verifyUrl.searchParams.set("token", token);
     await sendPlatformEmail({ to: user.email, subject: "Verify your MailBridge email", text: `Verify your email by opening: ${verifyUrl.toString()}`, html: `<p>Welcome to MailBridge.</p><p><a href="${verifyUrl.toString()}">Verify your email address</a></p><p>This link expires in 24 hours.</p>` });
     return NextResponse.json({ success: true, message: "Account created. Check your email to verify your address before signing in.", request_id: id }, { status: 201, headers: { "x-request-id": id, "cache-control": "no-store" } });
   } catch (error) {
+    if (createdUserId) await db.user.delete({ where: { id: createdUserId } }).catch(() => undefined);
     // Avoid revealing whether an account exists. Provider failures do not return internal details.
     const duplicate = error && typeof error === "object" && "code" in error && error.code === "P2002";
     if (duplicate) return NextResponse.json({ success: true, message: "If this address can be registered, verification instructions will be sent.", request_id: id }, { status: 202, headers: { "x-request-id": id, "cache-control": "no-store" } });
