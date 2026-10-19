@@ -10,7 +10,7 @@ import { authenticateProjectCredential } from "@/lib/project-auth";
 const schema = z.object({ project_id: z.string().min(1).max(100), template_id: z.string().min(1).max(100), to: z.array(z.string().email().max(254)).min(1).max(5), variables: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).default({}) }).strict();
 function monthStart(date: Date) { return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1)); }
 function err(status: number, code: string, message: string, id: string) { return apiError(status, code, message, id); }
-export async function POST(request: Request) {
+async function handleSend(request: Request) {
   const id = requestId(request);
   if (Number(request.headers.get("content-length") || 0) > 32_000) return err(413, "REQUEST_TOO_LARGE", "Request body exceeds 32 KB.", id);
   let body;
@@ -80,4 +80,21 @@ export async function POST(request: Request) {
     }
     return err(503, "QUEUE_UNAVAILABLE", "The message could not be queued. Retry with the same Idempotency-Key.", id);
   }
+}
+
+export async function POST(request: Request) {
+  const response = await handleSend(request);
+  const origin = request.headers.get("origin");
+  if (origin) {
+    const allowed = await db.allowedOrigin.findFirst({ where: { origin } }).catch(() => null);
+    if (allowed) { response.headers.set("access-control-allow-origin", origin); response.headers.set("vary", "Origin"); }
+  }
+  return response;
+}
+export async function OPTIONS(request: Request) {
+  const origin = request.headers.get("origin");
+  if (!origin) return new Response(null, { status: 204 });
+  const allowed = await db.allowedOrigin.findFirst({ where: { origin } }).catch(() => null);
+  if (!allowed) return new Response(null, { status: 403, headers: { "vary": "Origin" } });
+  return new Response(null, { status: 204, headers: { "access-control-allow-origin": origin, "access-control-allow-methods": "POST, OPTIONS", "access-control-allow-headers": "authorization, content-type, idempotency-key, x-request-id", "access-control-max-age": "600", "vary": "Origin" } });
 }
