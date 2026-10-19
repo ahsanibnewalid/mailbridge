@@ -13,6 +13,8 @@ function monthStart(date: Date) { return new Date(Date.UTC(date.getUTCFullYear()
 function err(status: number, code: string, message: string, id: string) { return apiError(status, code, message, id); }
 async function handleSend(request: Request) {
   const id = requestId(request);
+  const declaredLength = Number(request.headers.get("content-length") || 0);
+  if (Number.isFinite(declaredLength) && declaredLength > 32_000) return err(413, "REQUEST_TOO_LARGE", "Request body exceeds 32 KB.", id);
   let rawBody: string;
   try { rawBody = await request.text(); } catch { return err(400, "INVALID_REQUEST", "Request body could not be read.", id); }
   if (Buffer.byteLength(rawBody, "utf8") > 32_000) return err(413, "REQUEST_TOO_LARGE", "Request body exceeds 32 KB.", id);
