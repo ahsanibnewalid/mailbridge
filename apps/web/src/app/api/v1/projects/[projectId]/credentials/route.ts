@@ -25,3 +25,19 @@ export async function POST(request: Request, context: { params: Promise<{ projec
   await db.auditEvent.create({ data: { actorUserId: user.id, action: "credential.created", resourceType: "ProjectCredential", resourceId: credential.id, requestId: id, metadata: { type: credential.type } } });
   return NextResponse.json({ success: true, credential: { id: credential.id, type: credential.type, label: credential.label, key: token, shown_once: true } }, { status: 201, headers: { "cache-control": "no-store", "x-request-id": id } });
 }
+
+export async function DELETE(request: Request, context: { params: Promise<{ projectId: string }> }) {
+  const id = requestId(request);
+  if (!sameOriginAllowed(request)) return NextResponse.json({ success: false, error: { code: "ORIGIN_REJECTED" }, request_id: id }, { status: 403 });
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ success: false, error: { code: "UNAUTHENTICATED" }, request_id: id }, { status: 401 });
+  const { projectId } = await context.params;
+  if (!(await userCanManageProject(user.id, projectId, ["OWNER", "ADMINISTRATOR"]))) return NextResponse.json({ success: false, error: { code: "FORBIDDEN" }, request_id: id }, { status: 403 });
+  let body;
+  try { body = z.object({ credential_id: z.string().min(1).max(100) }).strict().safeParse(await request.json()); } catch { body = null; }
+  if (!body || !body.success) return NextResponse.json({ success: false, error: { code: "INVALID_REQUEST", message: "Provide credential_id." }, request_id: id }, { status: 400 });
+  const changed = await db.projectCredential.updateMany({ where: { id: body.data.credential_id, projectId, revokedAt: null }, data: { revokedAt: new Date() } });
+  if (changed.count !== 1) return NextResponse.json({ success: false, error: { code: "CREDENTIAL_NOT_FOUND", message: "Credential was not found or is already revoked." }, request_id: id }, { status: 404 });
+  await db.auditEvent.create({ data: { actorUserId: user.id, action: "credential.revoked", resourceType: "ProjectCredential", resourceId: body.data.credential_id, requestId: id } });
+  return NextResponse.json({ success: true, credential_id: body.data.credential_id, revoked: true, request_id: id }, { headers: { "cache-control": "no-store", "x-request-id": id } });
+}
