@@ -7,7 +7,7 @@ describe("template rendering", () => {
   });
   it("rejects nested values and invalid variable names", () => {
     expect(() => validateTemplateVariables({ user: { role: "admin" } })).toThrow();
-    expect(() => validateTemplateVariables({ "__proto__": "bad" })).toThrow();
+    expect(() => validateTemplateVariables(Object.fromEntries([["__proto__", "bad"]]))).toThrow();
   });
   it("rejects oversized template input", () => {
     expect(() => renderTemplate("x".repeat(200001), {})).toThrow(/maximum size/);
