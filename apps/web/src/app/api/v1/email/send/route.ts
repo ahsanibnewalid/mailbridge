@@ -48,7 +48,7 @@ async function handleSend(request: Request) {
   try {
     subject = Handlebars.compile(template.subject, { strict: true, noEscape: true })(variables);
     if (/[\r\n\x00-\x1f\x7f]/.test(subject) || subject.length > 998) return err(400, "INVALID_RENDERED_SUBJECT", "Rendered subject contains invalid header characters or is too long.", id);
-    html = Handlebars.compile(template.htmlBody, { strict: true, noEscape: false, allowProtoPropertiesByDefault: false, allowProtoMethodsByDefault: false })(variables);
+    html = Handlebars.compile(template.htmlBody, { strict: true, noEscape: false, allowProtoMethodsByDefault: false })(variables);
     text = template.textBody ? Handlebars.compile(template.textBody, { strict: true, noEscape: true })(variables) : undefined;
   } catch { return err(400, "TEMPLATE_RENDER_FAILED", "The template could not be rendered with the supplied variables.", id); }
   const now = new Date(); const periodStart = monthStart(now); const periodEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
